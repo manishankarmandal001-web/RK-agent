@@ -1,0 +1,6 @@
+{
+  "name": "AURA - Autonomous Multilingual AI Agent",
+  "description": "An advanced voice-reactive AI personal agent that automates WhatsApp replies in Bengali, English, and Hindi, manages emails and phone contacts, solves complex problems, and responds with lifelike voice and full-screen reactive animations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
