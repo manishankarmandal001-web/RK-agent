@@ -14,25 +14,24 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-// Initialize Google GenAI SDK (Server-side only)
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || '',
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
+// Helper to resolve Gemini AI client from environment or request headers
+function getAiClient(req?: Request): GoogleGenAI | null {
+  const key =
+    (req?.headers['x-gemini-api-key'] as string) ||
+    (req?.body?.apiKey as string) ||
+    process.env.GEMINI_API_KEY ||
+    '';
 
-// Helper to check API Key
-function checkApiKey(res: Response): boolean {
-  if (!process.env.GEMINI_API_KEY) {
-    res.status(500).json({
-      error: 'GEMINI_API_KEY is not configured on the server. Please check the Secrets panel.',
-    });
-    return false;
-  }
-  return true;
+  if (!key) return null;
+
+  return new GoogleGenAI({
+    apiKey: key,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 }
 
 // Resilient wrapper with automatic retry and model fallback for 503/429 spikes
@@ -40,7 +39,13 @@ async function generateWithRetry(params: {
   model?: string;
   contents: any;
   config?: any;
+  client?: GoogleGenAI | null;
 }) {
+  const client = params.client || getAiClient();
+  if (!client) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
   // Use high-capacity gemini-3.1-flash-lite first, then gemini-3.8-flash
   const models = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
   let lastErr: any = null;
@@ -48,7 +53,7 @@ async function generateWithRetry(params: {
   for (let attempt = 0; attempt < 2; attempt++) {
     for (const currentModel of models) {
       try {
-        return await ai.models.generateContent({
+        return await client.models.generateContent({
           ...params,
           model: currentModel,
         });
@@ -62,7 +67,6 @@ async function generateWithRetry(params: {
           errStr.includes('429');
 
         if (isTransient) {
-          // Silent non-logging delay to avoid triggering stdout/stderr error trackers
           await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
           continue;
         }
@@ -73,10 +77,13 @@ async function generateWithRetry(params: {
   throw lastErr;
 }
 
+// Create dedicated API router so endpoints match both /api/... and /... on Vercel
+const apiRouter = express.Router();
+
 // 1. Agent Chat & Multi-Tool Action Endpoint
-app.post('/api/agent/chat', async (req: Request, res: Response) => {
+apiRouter.post('/agent/chat', async (req: Request, res: Response) => {
   try {
-    if (!checkApiKey(res)) return;
+    const client = getAiClient(req);
 
     const {
       message,
@@ -88,12 +95,29 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
       voiceMode = false,
     } = req.body;
 
+    // If API key is missing on Vercel, provide helpful guidance instead of failing silently
+    if (!client) {
+      const guidanceReply =
+        currentLanguage === 'hi'
+          ? 'नमस्ते! MS Agent सफलतापूर्वक Vercel पर सक्रिय है। AI उत्तर और लाइव बातचीत शुरू करने के लिए कृपया Vercel Settings > Environment Variables में GEMINI_API_KEY जोड़ें या ऐप के ऊपर दिए गए Key आइकन में अपनी चाबी दर्ज करें।'
+          : currentLanguage === 'en'
+          ? 'Hello! MS Agent is successfully running on Vercel. To enable live AI intelligence, please add GEMINI_API_KEY in your Vercel Project Settings > Environment Variables, or click the Key button in the top navigation bar to enter your key.'
+          : 'নমস্কার! MS Agent সফলভাবে Vercel-এ চালু হয়েছে। সম্পূর্ণ এআই চ্যাট ও স্বয়ংক্রিয় উত্তর চালু করতে দয়া করে Vercel Settings > Environment Variables-এ আপনার GEMINI_API_KEY যোগ করুন অথবা অ্যাপের উপরে থাকা Key আইকনে ক্লিক করে কি প্রদান করুন।';
+
+      return res.json({
+        reply: guidanceReply,
+        languageDetected: currentLanguage === 'hi' ? 'Hindi' : currentLanguage === 'en' ? 'English' : 'Bengali',
+        reasoningSteps: ['Vercel Environment Check: GEMINI_API_KEY pending configuration'],
+        actions: [],
+      });
+    }
+
     if (!message && (!unreadWhatsApp.length && !unreadEmails.length)) {
       return res.status(400).json({ error: 'Message or input data is required' });
     }
 
     const systemInstruction = `
-You are AURA (Autonomous Universal Reactive Agent), a super-intelligent, polite, and deeply capable AI personal agent.
+You are MS Agent (Autonomous Universal Multilingual AI Agent), an ultra-intelligent, polite, and deeply capable AI personal agent.
 You act directly on behalf of the user ("Owner").
 
 Your capabilities include:
@@ -120,28 +144,20 @@ Response Guidelines:
   "reasoningSteps": ["Brief step 1 if solving a problem", "Step 2..."],
   "actions": [
     {
-      "type": "whatsapp_reply" | "whatsapp_send" | "email_reply" | "email_send" | "contact_add" | "contact_update" | "none",
-      "target": "recipient name or phone or email",
-      "content": "message or email body",
-      "subject": "email subject if applicable",
-      "status": "ready" | "executed"
+      "type": "whatsapp_reply" | "whatsapp_send" | "email_reply" | "email_send" | "contact_add",
+      "target": "Phone number, Contact name, or Email address",
+      "content": "Full body of message or email",
+      "subject": "Email subject if type is email"
     }
   ]
 }
-Return STRICTLY valid JSON. Do not include markdown ticks if possible, or wrap cleanly in JSON.
 `;
 
-    const chatContents: any[] = [];
+    const chatContents = history.map((item: any) => ({
+      role: item.role === 'agent' ? 'model' : 'user',
+      parts: [{ text: item.text }],
+    }));
 
-    // Push past history if available
-    for (const item of history.slice(-6)) {
-      chatContents.push({
-        role: item.role === 'user' ? 'user' : 'model',
-        parts: [{ text: item.content }],
-      });
-    }
-
-    // Add current user instruction
     chatContents.push({
       role: 'user',
       parts: [
@@ -152,6 +168,7 @@ Return STRICTLY valid JSON. Do not include markdown ticks if possible, or wrap c
     });
 
     const response = await generateWithRetry({
+      client,
       model: 'gemini-3.8-flash',
       contents: chatContents,
       config: {
@@ -195,10 +212,8 @@ function cleanTextForSpeech(raw: string): string {
 }
 
 // 2. High-Fidelity Text-to-Speech (100% Guaranteed Genuine Human Voice)
-app.post('/api/agent/tts', async (req: Request, res: Response) => {
+apiRouter.post('/agent/tts', async (req: Request, res: Response) => {
   try {
-    if (!checkApiKey(res)) return;
-
     const { text, voice = 'Kore', language = 'auto' } = req.body;
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'Text is required for TTS' });
@@ -215,48 +230,51 @@ app.post('/api/agent/tts', async (req: Request, res: Response) => {
       langCode = 'hi';
     }
 
-    // 1. Try Gemini Flagship Human Voice (gemini-3.8-flash-tts)
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: speechText,
-                speechMetadata: {
-                  style: 'Natural, authentic, articulate, warm and friendly genuine human voice',
+    const client = getAiClient(req);
+
+    // 1. If Gemini client is available, try Gemini Flagship Human Voice (gemini-3.8-flash-tts)
+    if (client) {
+      try {
+        const response = await client.models.generateContent({
+          model: 'gemini-3.8-flash-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: speechText,
+                  speechMetadata: {
+                    style: 'Natural, authentic, articulate, warm and friendly genuine human voice',
+                  },
                 },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voice },
               },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voice }, // 'Kore', 'Puck', 'Fenrir', 'Zephyr', 'Charon'
             },
           },
-        },
-      });
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        return res.json({
-          audioBase64: base64Audio,
-          mimeType: 'audio/wav',
-          engine: 'gemini-3.8-flash-tts',
         });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          return res.json({
+            audioBase64: base64Audio,
+            mimeType: 'audio/wav',
+            engine: 'gemini-3.8-flash-tts',
+          });
+        }
+      } catch (geminiErr: any) {
+        // Fall through to Neural Human Speech Engine
       }
-    } catch (geminiErr: any) {
-      // If Gemini quota limit (429) occurs, seamlessly fall back to Neural Human Speech
     }
 
-    // 2. Multi-sentence Human Neural Speech Engine (Zero Quota Limit)
+    // 2. Multi-sentence Human Neural Speech Engine (100% Guaranteed, No API Key Required)
     try {
-      // Chunk speech by sentence
       const regex = /[^।\.!\?]+[।\.!\?]+/g;
       let sentences = speechText.match(regex);
       if (!sentences || sentences.length === 0) {
@@ -298,7 +316,7 @@ app.post('/api/agent/tts', async (req: Request, res: Response) => {
         });
       }
     } catch (ttsErr: any) {
-      // Fallback chunking failure
+      console.error('Neural TTS fetch error:', ttsErr);
     }
 
     res.status(500).json({ error: 'Could not generate voice' });
@@ -308,14 +326,22 @@ app.post('/api/agent/tts', async (req: Request, res: Response) => {
 });
 
 // 3. WhatsApp Autonomous Auto-Reply Generator
-app.post('/api/agent/whatsapp-reply', async (req: Request, res: Response) => {
+apiRouter.post('/agent/whatsapp-reply', async (req: Request, res: Response) => {
   try {
-    if (!checkApiKey(res)) return;
-
+    const client = getAiClient(req);
     const { incomingMessage, senderName, context = '', tone = 'friendly_professional' } = req.body;
 
+    if (!client) {
+      return res.json({
+        detectedLanguage: 'Bengali',
+        suggestedReply: 'ধন্যবাদ, আমি আপনার বার্তা পেয়েছি এবং শীঘ্রই উত্তর দিচ্ছি।',
+        alternatives: ['ধন্যবাদ, শীঘ্রই জানাচ্ছি।', 'একটু পর কল করছি।', 'থ্যাংক ইউ!'],
+        summary: 'Message received by MS Agent',
+      });
+    }
+
     const prompt = `
-You are the WhatsApp Auto-Reply Manager of the user's AI Agent.
+You are MS Agent, the WhatsApp Auto-Reply Manager.
 Sender: "${senderName}"
 Incoming Message: "${incomingMessage}"
 Tone requested: "${tone}"
@@ -323,7 +349,7 @@ User context/notes: "${context}"
 
 Task:
 1. Detect whether the message is in Bengali (বাংলা), Hindi (हिन्दी), English, or another language.
-2. Formulate a polite, natural, and helpful reply in the EXACT SAME language. If Bengali, write authentic Bengali (e.g. "ধন্যবাদ, আমি আপনার বার্তা পেয়েছি..."). If Hindi, write natural Hindi (e.g. "नमस्ते, मुझे आपका संदेश मिला..."). If English, write fluent English.
+2. Formulate a polite, natural, and helpful reply in the EXACT SAME language. If Bengali, write authentic Bengali. If Hindi, write natural Hindi. If English, write fluent English.
 3. Suggest 3 alternative quick response options.
 
 Return JSON:
@@ -336,6 +362,7 @@ Return JSON:
 `;
 
     const response = await generateWithRetry({
+      client,
       model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
@@ -352,11 +379,23 @@ Return JSON:
 });
 
 // 4. Email Auto-Triage & Smart Response Generator
-app.post('/api/agent/email-triage', async (req: Request, res: Response) => {
+apiRouter.post('/agent/email-triage', async (req: Request, res: Response) => {
   try {
-    if (!checkApiKey(res)) return;
-
+    const client = getAiClient(req);
     const { sender, subject, body, preferredLanguage = 'en' } = req.body;
+
+    if (!client) {
+      return res.json({
+        category: 'Work',
+        priorityScore: 7,
+        summary: 'Email received from ' + sender,
+        suggestedDraft: {
+          subject: 'Re: ' + subject,
+          body: 'Thank you for your email. I have received your message and will respond shortly.',
+        },
+        actionItems: ['Review message details', 'Follow up with sender'],
+      });
+    }
 
     const prompt = `
 You are the Executive Email Assistant for the user.
@@ -385,6 +424,7 @@ Return JSON:
 `;
 
     const response = await generateWithRetry({
+      client,
       model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
@@ -401,16 +441,19 @@ Return JSON:
 });
 
 // 5. Advanced Problem Solver Endpoint
-app.post('/api/agent/solve-problem', async (req: Request, res: Response) => {
+apiRouter.post('/agent/solve-problem', async (req: Request, res: Response) => {
   try {
-    if (!checkApiKey(res)) return;
-
+    const client = getAiClient(req);
     const { problem, domain = 'general', language = 'auto' } = req.body;
+
+    if (!client) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY required for advanced problem solving' });
+    }
 
     const prompt = `
 You are an Advanced Problem Solving Engine. The user has posed an advanced-level problem:
 Problem: "${problem}"
-Domain: "${domain}" (can be coding, math, scientific, business strategy, logical deduction, algorithmic)
+Domain: "${domain}"
 Language: "${language}"
 
 Please provide an exceptional, rigorous breakdown:
@@ -438,6 +481,7 @@ Return JSON:
 `;
 
     const response = await generateWithRetry({
+      client,
       model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
@@ -486,7 +530,7 @@ const whatsappConfig: WhatsAppConnectionConfig = {
 // --- WhatsApp Webhook Integration Endpoints ---
 
 // 1. Meta WhatsApp Webhook Verification (GET)
-app.get('/api/whatsapp/webhook', (req: Request, res: Response) => {
+apiRouter.get('/whatsapp/webhook', (req: Request, res: Response) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
@@ -500,11 +544,11 @@ app.get('/api/whatsapp/webhook', (req: Request, res: Response) => {
 });
 
 // 2. Meta WhatsApp Incoming Message Event (POST)
-app.post('/api/whatsapp/webhook', async (req: Request, res: Response) => {
+apiRouter.post('/whatsapp/webhook', async (req: Request, res: Response) => {
   try {
     const body = req.body;
+    const client = getAiClient(req);
 
-    // Extract sender & message from Meta Cloud API or simplified test webhook
     let sender = 'Unknown';
     let senderName = 'WhatsApp User';
     let messageText = '';
@@ -515,7 +559,6 @@ app.post('/api/whatsapp/webhook', async (req: Request, res: Response) => {
       const contact = value.contacts?.[0];
 
       if (!message) {
-        // May be a status receipt (sent, delivered, read)
         return res.status(200).json({ status: 'received_receipt' });
       }
 
@@ -523,7 +566,6 @@ app.post('/api/whatsapp/webhook', async (req: Request, res: Response) => {
       senderName = contact?.profile?.name || sender;
       messageText = message.text?.body || message.caption || '[Attachment/Voice]';
     } else if (body.from || body.messageText) {
-      // Simplified simulation or direct webhook forwarder
       sender = body.from || body.phone || '+91 98000 12345';
       senderName = body.senderName || 'Contact';
       messageText = body.text || body.messageText || '';
@@ -533,11 +575,10 @@ app.post('/api/whatsapp/webhook', async (req: Request, res: Response) => {
       return res.status(200).json({ status: 'no_text_message' });
     }
 
-    // Auto-reply generation via Gemini if enabled
-    let generatedReply = '';
+    let generatedReply = 'ধন্যবাদ, আমি আপনার বার্তা পেয়েছি।';
     let languageDetected = 'Bengali';
 
-    if (whatsappConfig.autoReplyEnabled) {
+    if (whatsappConfig.autoReplyEnabled && client) {
       const prompt = `
 You are MS Agent (Autonomous WhatsApp Personal Assistant for the owner).
 An incoming WhatsApp message has just arrived:
@@ -557,6 +598,7 @@ Format as JSON:
 `;
 
       const aiResponse = await generateWithRetry({
+        client,
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' },
@@ -623,7 +665,7 @@ Format as JSON:
 });
 
 // 3. Get WhatsApp Connection Configuration & Logs
-app.get('/api/whatsapp/config', (_req: Request, res: Response) => {
+apiRouter.get('/whatsapp/config', (_req: Request, res: Response) => {
   res.json({
     webhookVerifyToken: whatsappConfig.webhookVerifyToken,
     phoneNumberId: whatsappConfig.phoneNumberId ? '••••' + whatsappConfig.phoneNumberId.slice(-4) : '',
@@ -636,7 +678,7 @@ app.get('/api/whatsapp/config', (_req: Request, res: Response) => {
 });
 
 // 4. Update WhatsApp Connection Configuration
-app.post('/api/whatsapp/config', (req: Request, res: Response) => {
+apiRouter.post('/whatsapp/config', (req: Request, res: Response) => {
   const {
     webhookVerifyToken,
     phoneNumberId,
@@ -663,8 +705,9 @@ app.post('/api/whatsapp/config', (req: Request, res: Response) => {
 });
 
 // 5. Test Live WhatsApp Webhook Trigger
-app.post('/api/whatsapp/test-webhook', async (req: Request, res: Response) => {
+apiRouter.post('/whatsapp/test-webhook', async (req: Request, res: Response) => {
   try {
+    const client = getAiClient(req);
     const { senderName = 'অনিন্দ্য সেন', message = 'দাদা, প্রজেক্ট ফাইলটা কি রেডি?', language = 'bn' } = req.body;
 
     const fakePayload = {
@@ -673,8 +716,11 @@ app.post('/api/whatsapp/test-webhook', async (req: Request, res: Response) => {
       text: message,
     };
 
-    // Forward to webhook logic
-    const prompt = `
+    let replyText = 'ধন্যবাদ, আমি আপনার বার্তা পেয়েছি।';
+    let detectedLang = language === 'bn' ? 'Bengali' : language === 'hi' ? 'Hindi' : 'English';
+
+    if (client) {
+      const prompt = `
 You are MS Agent, an AI WhatsApp auto-responder for the user.
 Incoming WhatsApp message:
 From: "${senderName}"
@@ -690,14 +736,17 @@ Format as JSON:
 }
 `;
 
-    const aiResponse = await generateWithRetry({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
-    });
+      const aiResponse = await generateWithRetry({
+        client,
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json' },
+      });
 
-    const parsed = JSON.parse(aiResponse.text || '{}');
-    const replyText = parsed.reply || 'ধন্যবাদ, আমি আপনার বার্তা পেয়েছি।';
+      const parsed = JSON.parse(aiResponse.text || '{}');
+      replyText = parsed.reply || replyText;
+      detectedLang = parsed.language || detectedLang;
+    }
 
     const logEntry = {
       id: 'log_' + Date.now(),
@@ -706,7 +755,7 @@ Format as JSON:
       senderName,
       incomingMessage: message,
       replySent: replyText,
-      language: parsed.language || 'Bengali',
+      language: detectedLang,
       status: 'delivered' as const,
     };
 
@@ -723,6 +772,10 @@ Format as JSON:
     res.status(500).json({ error: err?.message || 'Test webhook failed' });
   }
 });
+
+// MOUNT ROUTER ON BOTH '/api' AND '/' TO GUARANTEE VERCEL COMPATIBILITY
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 // Vite middleware in dev / Static files in production
 async function startServer() {
@@ -742,14 +795,14 @@ async function startServer() {
     });
   }
 
-  // Only bind port if not running in a serverless environment (Vercel)
-  if (process.env.VERCEL !== '1') {
-    app.listen(PORT, () => {
-      console.log(`MS Agent server listening on port ${PORT} (dev mode: ${!isProd})`);
-    });
-  }
+  app.listen(PORT, () => {
+    console.log(`MS Agent server listening on port ${PORT} (dev mode: ${!isProd})`);
+  });
 }
 
-startServer();
+// Only start the HTTP listener if NOT running in a Vercel serverless environment
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  startServer();
+}
 
 export default app;

@@ -1,5 +1,18 @@
 import { AgentChatMessage, PhoneContact, WhatsAppChat, EmailMessage } from '../types/agent';
 
+function getHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (typeof window !== 'undefined') {
+    const userKey = localStorage.getItem('ms_agent_gemini_key');
+    if (userKey && userKey.trim()) {
+      headers['x-gemini-api-key'] = userKey.trim();
+    }
+  }
+  return headers;
+}
+
 export async function sendAgentChat(params: {
   message: string;
   history?: Array<{ role: 'user' | 'agent'; content: string }>;
@@ -11,7 +24,7 @@ export async function sendAgentChat(params: {
 }) {
   const res = await fetch('/api/agent/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(params),
   });
   if (!res.ok) {
@@ -24,7 +37,7 @@ export async function sendAgentChat(params: {
 export async function requestAgentTts(text: string, voice = 'Kore'): Promise<string> {
   const res = await fetch('/api/agent/tts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ text, voice }),
   });
   if (!res.ok) {
@@ -47,7 +60,7 @@ export async function generateWhatsAppAutoReply(params: {
 }) {
   const res = await fetch('/api/agent/whatsapp-reply', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(params),
   });
   if (!res.ok) {
@@ -65,7 +78,7 @@ export async function triageEmailMessage(params: {
 }) {
   const res = await fetch('/api/agent/email-triage', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(params),
   });
   if (!res.ok) {
@@ -80,9 +93,17 @@ export async function solveProblemWithAi(params: {
   domain?: string;
   language?: string;
 }) {
+  return solveComplexProblem(params);
+}
+
+export async function solveComplexProblem(params: {
+  problem: string;
+  domain?: string;
+  language?: string;
+}) {
   const res = await fetch('/api/agent/solve-problem', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(params),
   });
   if (!res.ok) {
