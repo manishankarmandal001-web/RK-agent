@@ -276,17 +276,53 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
 
       audio.onerror = () => {
         if (sessionId === audioSessionIdRef.current) {
-          stopAllAudio();
-          setStatus('idle');
+          fallbackToWebSpeech(text, sessionId);
         }
       };
 
       await audio.play();
     } catch {
       if (sessionId === audioSessionIdRef.current) {
-        stopAllAudio();
-        setStatus('idle');
+        fallbackToWebSpeech(text, sessionId);
       }
+    }
+  };
+
+  const fallbackToWebSpeech = (text: string, sessionId: number) => {
+    if (!('speechSynthesis' in window) || sessionId !== audioSessionIdRef.current) {
+      setStatus('idle');
+      return;
+    }
+
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (selectedLanguage === 'bn') utterance.lang = 'bn-BD';
+      else if (selectedLanguage === 'hi') utterance.lang = 'hi-IN';
+      else utterance.lang = 'en-US';
+
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      utterance.onend = () => {
+        if (sessionId === audioSessionIdRef.current) {
+          onAudioEnd();
+          setStatus('idle');
+          onSpeechTextUpdate('');
+        }
+      };
+
+      utterance.onerror = () => {
+        if (sessionId === audioSessionIdRef.current) {
+          onAudioEnd();
+          setStatus('idle');
+          onSpeechTextUpdate('');
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      setStatus('idle');
     }
   };
 
