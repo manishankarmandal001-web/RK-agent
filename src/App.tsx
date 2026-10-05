@@ -220,6 +220,33 @@ export default function App() {
 
   const appAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  const fallbackSpeechSynthesis = (text: string) => {
+    if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        if (selectedLanguage === 'bn') utter.lang = 'bn-BD';
+        else if (selectedLanguage === 'hi') utter.lang = 'hi-IN';
+        else utter.lang = 'en-US';
+        utter.onend = () => {
+          setAgentStatus('idle');
+          setCurrentSpeechText('');
+          handleAudioEnd();
+        };
+        utter.onerror = () => {
+          setAgentStatus('idle');
+          setCurrentSpeechText('');
+          handleAudioEnd();
+        };
+        window.speechSynthesis.speak(utter);
+        return;
+      } catch {}
+    }
+    setAgentStatus('idle');
+    setCurrentSpeechText('');
+    handleAudioEnd();
+  };
+
   const handleSpeakText = async (text: string) => {
     // Teardown previous speech to prevent overlapping
     if (appAudioRef.current) {
@@ -239,7 +266,19 @@ export default function App() {
     try {
       setAgentStatus('speaking');
       setCurrentSpeechText(text);
-      const audioUrl = await requestAgentTts(text, 'Kore');
+
+      let audioUrl: string;
+      try {
+        audioUrl = await requestAgentTts(text, 'Kore');
+      } catch (err) {
+        let langCode = 'bn';
+        if (selectedLanguage === 'hi' || /[\u0900-\u097F]/.test(text)) langCode = 'hi';
+        else if (selectedLanguage === 'en') langCode = 'en';
+        audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
+          text.slice(0, 180)
+        )}&tl=${langCode}&client=tw-ob`;
+      }
+
       const audio = new Audio(audioUrl);
       appAudioRef.current = audio;
 
@@ -248,11 +287,17 @@ export default function App() {
         setCurrentSpeechText('');
         handleAudioEnd();
       };
-      await audio.play();
+      audio.onerror = () => {
+        fallbackSpeechSynthesis(text);
+      };
+
+      try {
+        await audio.play();
+      } catch {
+        fallbackSpeechSynthesis(text);
+      }
     } catch {
-      setAgentStatus('idle');
-      setCurrentSpeechText('');
-      handleAudioEnd();
+      fallbackSpeechSynthesis(text);
     }
   };
 
