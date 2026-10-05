@@ -192,69 +192,56 @@ export const EmailHub: React.FC<EmailHubProps> = ({
 
         {/* Email Items List */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
-          {filteredEmails.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
-              <Mail className="w-8 h-8 text-slate-600" />
-              <p className="text-xs">No emails in inbox.</p>
+          {filteredEmails.map((email) => {
+            const isSelected = email.id === activeEmail?.id;
+
+            return (
               <button
-                onClick={() => setShowCompose(true)}
-                className="mt-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium cursor-pointer"
+                key={email.id}
+                onClick={() => handleSelectEmail(email)}
+                className={`w-full p-3 flex items-start gap-2.5 text-left transition-colors cursor-pointer ${
+                  isSelected ? 'bg-blue-950/40 border-l-2 border-blue-400' : 'hover:bg-slate-900/60'
+                } ${!email.isRead ? 'bg-slate-900/40 font-semibold' : ''}`}
               >
-                Compose Email
-              </button>
-            </div>
-          ) : (
-            filteredEmails.map((email) => {
-              const isSelected = email.id === activeEmail?.id;
-
-              return (
                 <button
-                  key={email.id}
-                  onClick={() => handleSelectEmail(email)}
-                  className={`w-full p-3 flex items-start gap-2.5 text-left transition-colors cursor-pointer ${
-                    isSelected ? 'bg-blue-950/40 border-l-2 border-blue-400' : 'hover:bg-slate-900/60'
-                  } ${!email.isRead ? 'bg-slate-900/40 font-semibold' : ''}`}
+                  type="button"
+                  onClick={(e) => handleToggleStar(e, email.id)}
+                  className="mt-0.5 text-slate-500 hover:text-amber-400 transition-colors"
                 >
-                  <button
-                    type="button"
-                    onClick={(e) => handleToggleStar(e, email.id)}
-                    className="mt-0.5 text-slate-500 hover:text-amber-400 transition-colors"
-                  >
-                    <Star className={`w-3.5 h-3.5 ${email.isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
-                  </button>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-xs text-slate-200 truncate">{email.sender}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">{email.date}</span>
-                    </div>
-
-                    <h5 className="text-xs text-slate-100 truncate mb-1">{email.subject}</h5>
-
-                    <p className="text-[11px] text-slate-400 line-clamp-1 font-normal">{email.body}</p>
-
-                    <div className="flex items-center gap-2 mt-2 text-[10px]">
-                      <span
-                        className={`px-1.5 py-0.5 rounded font-mono font-medium ${
-                          email.category === 'Urgent'
-                            ? 'bg-rose-950/80 text-rose-300 border border-rose-800'
-                            : email.category === 'Work'
-                            ? 'bg-blue-950/80 text-blue-300 border border-blue-800'
-                            : 'bg-slate-800 text-slate-300'
-                        }`}
-                      >
-                        {email.category}
-                      </span>
-
-                      <span className="text-slate-400 font-mono">
-                        Priority: <strong className="text-amber-400">{email.priorityScore}/10</strong>
-                      </span>
-                    </div>
-                  </div>
+                  <Star className={`w-3.5 h-3.5 ${email.isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
                 </button>
-              );
-            })
-          )}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-xs text-slate-200 truncate">{email.sender}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">{email.date}</span>
+                  </div>
+
+                  <h5 className="text-xs text-slate-100 truncate mb-1">{email.subject}</h5>
+
+                  <p className="text-[11px] text-slate-400 line-clamp-1 font-normal">{email.body}</p>
+
+                  <div className="flex items-center gap-2 mt-2 text-[10px]">
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-mono font-medium ${
+                        email.category === 'Urgent'
+                          ? 'bg-rose-950/80 text-rose-300 border border-rose-800'
+                          : email.category === 'Work'
+                          ? 'bg-blue-950/80 text-blue-300 border border-blue-800'
+                          : 'bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      {email.category}
+                    </span>
+
+                    <span className="text-slate-400 font-mono">
+                      Priority: <strong className="text-amber-400">{email.priorityScore}/10</strong>
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

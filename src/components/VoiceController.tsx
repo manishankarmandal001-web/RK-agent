@@ -235,19 +235,8 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
     }
 
     try {
-      // 1. Fetch authentic Gemini Human Voice from server, with direct stream fallback
-      let audioDataUri: string;
-      try {
-        audioDataUri = await requestAgentTts(text, selectedVoice);
-      } catch (srvErr) {
-        console.warn('Server TTS failed, falling back to direct stream:', srvErr);
-        let langCode = 'bn';
-        if (selectedLanguage === 'hi' || /[\u0900-\u097F]/.test(text)) langCode = 'hi';
-        else if (selectedLanguage === 'en') langCode = 'en';
-        audioDataUri = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
-          text.slice(0, 180)
-        )}&tl=${langCode}&client=tw-ob`;
-      }
+      // 1. Fetch authentic Gemini Human Voice from server
+      const audioDataUri = await requestAgentTts(text, selectedVoice);
 
       // Verify that no other audio request superceded this one
       if (sessionId !== audioSessionIdRef.current) {
@@ -275,7 +264,7 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
         analyser.connect(audioCtx.destination);
         onAudioStart(analyser);
       } catch (nodeErr) {
-        // If already connected or cross-origin, audio element will still play directly
+        // If already connected or CORS, audio still plays
       }
 
       audio.onended = () => {
@@ -287,55 +276,17 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
 
       audio.onerror = () => {
         if (sessionId === audioSessionIdRef.current) {
-          fallbackSpeechSynthesis(text, sessionId);
+          stopAllAudio();
+          setStatus('idle');
         }
       };
 
-      try {
-        await audio.play();
-      } catch (playErr) {
-        console.warn('Audio.play rejected, using speech synthesis fallback:', playErr);
-        fallbackSpeechSynthesis(text, sessionId);
-      }
+      await audio.play();
     } catch {
       if (sessionId === audioSessionIdRef.current) {
-        fallbackSpeechSynthesis(text, sessionId);
+        stopAllAudio();
+        setStatus('idle');
       }
-    }
-  };
-
-  const fallbackSpeechSynthesis = (text: string, sessionId: number) => {
-    if (!('speechSynthesis' in window) || sessionId !== audioSessionIdRef.current) {
-      stopAllAudio();
-      setStatus('idle');
-      return;
-    }
-
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      if (selectedLanguage === 'bn') utterance.lang = 'bn-BD';
-      else if (selectedLanguage === 'hi') utterance.lang = 'hi-IN';
-      else utterance.lang = 'en-US';
-
-      utterance.onend = () => {
-        if (sessionId === audioSessionIdRef.current) {
-          stopAllAudio();
-          setStatus('idle');
-        }
-      };
-
-      utterance.onerror = () => {
-        if (sessionId === audioSessionIdRef.current) {
-          stopAllAudio();
-          setStatus('idle');
-        }
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      stopAllAudio();
-      setStatus('idle');
     }
   };
 
@@ -347,21 +298,13 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
       return;
     }
 
-    // Unlock browser audio context immediately on direct click
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (audioContextRef.current.state === 'suspended') {
-      audioContextRef.current.resume();
-    }
-
     setIsTestingVoice(true);
     const testSample =
       selectedLanguage === 'bn'
-        ? 'নমস্কার! এটি MS Agent-এর খাঁটি মানুষের কণ্ঠস্বর। আমি যেকোনো নির্দেশ পালন করতে প্রস্তুত।'
+        ? 'নমস্কার! এটি AURA এজেন্টের খাঁটি মানুষের কণ্ঠস্বর। আমি যেকোনো নির্দেশ পালন করতে প্রস্তুত।'
         : selectedLanguage === 'hi'
-        ? 'नमस्ते! यह MS Agent की प्रामाणिक मानवीय आवाज़ है। मैं आपकी सहायता के लिए तैयार हूँ।'
-        : 'Hello! This is the authentic human voice of your MS Agent personal assistant. How can I assist you today?';
+        ? 'नमस्ते! यह AURA एजेंट की प्रामाणिक मानवीय आवाज़ है। मैं आपकी सहायता के लिए तैयार हूँ।'
+        : 'Hello! This is the authentic human voice of your AURA personal agent. How can I assist you today?';
 
     await playVoiceResponse(testSample);
   };

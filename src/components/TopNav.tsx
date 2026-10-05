@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   MessageSquare,
   Mail,
@@ -10,9 +10,6 @@ import {
   Activity,
   Globe,
   Maximize2,
-  KeyRound,
-  Check,
-  ExternalLink,
 } from 'lucide-react';
 import { AgentStatus, LanguageCode } from '../types/agent';
 
@@ -39,33 +36,6 @@ export const TopNav: React.FC<TopNavProps> = ({
   unreadEmailCount,
   recentActionLog,
 }) => {
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [savedSuccess, setSavedSuccess] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const existing = localStorage.getItem('ms_agent_gemini_key');
-      if (existing) setApiKeyInput(existing);
-    }
-  }, []);
-
-  const handleSaveKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (typeof window !== 'undefined') {
-      if (apiKeyInput.trim()) {
-        localStorage.setItem('ms_agent_gemini_key', apiKeyInput.trim());
-      } else {
-        localStorage.removeItem('ms_agent_gemini_key');
-      }
-      setSavedSuccess(true);
-      setTimeout(() => {
-        setSavedSuccess(false);
-        setShowKeyModal(false);
-      }, 1200);
-    }
-  };
-
   return (
     <header className="w-full bg-slate-950/90 border-b border-slate-800/80 backdrop-blur-xl sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -88,19 +58,10 @@ export const TopNav: React.FC<TopNavProps> = ({
             </div>
           </div>
 
-          {/* Mobile language badge & Key button */}
-          <div className="md:hidden flex items-center gap-2">
-            <button
-              onClick={() => setShowKeyModal(true)}
-              className="p-1 rounded bg-slate-800 text-cyan-400 text-xs flex items-center gap-1 cursor-pointer"
-              title="Configure API Key"
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex items-center gap-1 text-[11px] font-mono text-cyan-400">
-              <Globe className="w-3.5 h-3.5" />
-              <span>{selectedLanguage.toUpperCase()}</span>
-            </div>
+          {/* Mobile language badge */}
+          <div className="md:hidden flex items-center gap-1 text-[11px] font-mono text-cyan-400">
+            <Globe className="w-3.5 h-3.5" />
+            <span>{selectedLanguage.toUpperCase()}</span>
           </div>
         </div>
 
@@ -110,7 +71,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             onClick={() => onSelectTab('visualizer')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'visualizer'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -129,7 +90,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             <MessageSquare className="w-3.5 h-3.5" />
             <span>WhatsApp</span>
             {unreadWhatsAppCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-cyan-400 text-slate-950 font-bold text-[9px] flex items-center justify-center">
+              <span className="w-4 h-4 rounded-full bg-emerald-400 text-slate-950 text-[10px] font-bold flex items-center justify-center">
                 {unreadWhatsAppCount}
               </span>
             )}
@@ -144,9 +105,9 @@ export const TopNav: React.FC<TopNavProps> = ({
             }`}
           >
             <Mail className="w-3.5 h-3.5" />
-            <span>Emails</span>
+            <span>Email</span>
             {unreadEmailCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-cyan-400 text-slate-950 font-bold text-[9px] flex items-center justify-center">
+              <span className="w-4 h-4 rounded-full bg-blue-400 text-slate-950 text-[10px] font-bold flex items-center justify-center">
                 {unreadEmailCount}
               </span>
             )}
@@ -177,22 +138,12 @@ export const TopNav: React.FC<TopNavProps> = ({
           </button>
         </nav>
 
-        {/* Global Agent Language Selector & API Key Settings */}
+        {/* Global Agent Language Selector */}
         <div className="hidden md:flex items-center gap-2">
-          {/* Vercel / Gemini Key Button */}
-          <button
-            onClick={() => setShowKeyModal(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-cyan-400 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Configure Gemini API Key / Vercel Settings"
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            <span>API Key</span>
-          </button>
-
           <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
             <button
               onClick={() => onChangeLanguage('bn')}
-              className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-medium transition-colors ${
                 selectedLanguage === 'bn' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -200,7 +151,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             </button>
             <button
               onClick={() => onChangeLanguage('en')}
-              className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-medium transition-colors ${
                 selectedLanguage === 'en' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -208,7 +159,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             </button>
             <button
               onClick={() => onChangeLanguage('hi')}
-              className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-medium transition-colors ${
                 selectedLanguage === 'hi' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -227,82 +178,6 @@ export const TopNav: React.FC<TopNavProps> = ({
             <span className="truncate">{recentActionLog}</span>
           </div>
           <span className="text-[10px] text-slate-500 shrink-0">Real-time Autonomous Event</span>
-        </div>
-      )}
-
-      {/* API Key & Vercel Settings Modal */}
-      {showKeyModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <h4 className="text-sm font-bold text-white">Gemini API Key / Vercel Configuration</h4>
-              </div>
-              <button
-                onClick={() => setShowKeyModal(false)}
-                className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 space-y-1.5 leading-relaxed">
-                <p className="font-semibold text-cyan-300">Vercel-এ স্থাপনের নিয়ম (Deployment Guide):</p>
-                <p>
-                  1. Vercel ড্যাশবোর্ডে গিয়ে আপনার প্রজেক্টের <strong>Settings &gt; Environment Variables</strong>-এ যান।
-                </p>
-                <p>
-                  2. Name হিসেবে দিন: <code className="text-emerald-400 font-mono">GEMINI_API_KEY</code>
-                </p>
-                <p>
-                  3. অথবা আপনি নিচে সরাসরি আপনার API Key টি পেস্ট করে ব্রাউজারে সেভ করতে পারেন:
-                </p>
-              </div>
-
-              <form onSubmit={handleSaveKey} className="space-y-3">
-                <div>
-                  <label className="block text-slate-400 font-mono text-[11px] mb-1">
-                    Enter Gemini API Key (starts with AIzaSy...):
-                  </label>
-                  <input
-                    type="password"
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1"
-                  >
-                    Get Free Gemini API Key <ExternalLink className="w-3 h-3" />
-                  </a>
-
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-md"
-                  >
-                    {savedSuccess ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-300" /> Saved!
-                      </>
-                    ) : (
-                      'Save Key'
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
         </div>
       )}
     </header>

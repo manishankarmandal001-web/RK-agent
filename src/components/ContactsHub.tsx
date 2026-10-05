@@ -150,111 +150,95 @@ export const ContactsHub: React.FC<ContactsHubProps> = ({
       </div>
 
       {/* Contacts Cards Grid */}
-      {filteredContacts.length === 0 ? (
-        <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3 bg-slate-950/40 rounded-xl border border-slate-800">
-          <Users className="w-12 h-12 text-slate-600" />
-          <h4 className="text-sm font-semibold text-white">No Contacts Added Yet</h4>
-          <p className="text-xs text-slate-400 max-w-sm">
-            Add contacts to manage phone numbers, trigger WhatsApp messages, and draft emails with MS Agent.
-          </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer shadow-md"
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-1">
+        {filteredContacts.map((contact) => (
+          <div
+            key={contact.id}
+            className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-purple-500/40 transition-all flex flex-col justify-between gap-3 shadow-lg"
           >
-            <UserPlus className="w-3.5 h-3.5" /> Add First Contact
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-1">
-          {filteredContacts.map((contact) => (
-            <div
-              key={contact.id}
-              className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-purple-500/40 transition-all flex flex-col justify-between gap-3 shadow-lg"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-11 h-11 rounded-full bg-gradient-to-tr ${contact.avatarColor} flex items-center justify-center text-white font-bold text-sm shadow-md`}
-                  >
-                    {contact.name.slice(0, 2)}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                      {contact.name}
-                      {contact.starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
-                    </h4>
-                    <span className="text-[11px] text-purple-400 font-mono">{contact.relationship}</span>
-                  </div>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-11 h-11 rounded-full bg-gradient-to-tr ${contact.avatarColor} flex items-center justify-center text-white font-bold text-sm shadow-md`}
+                >
+                  {contact.name.slice(0, 2)}
                 </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleToggleStar(contact.id)}
-                    className="p-1 text-slate-500 hover:text-amber-400 transition-colors cursor-pointer"
-                  >
-                    <Star className={`w-3.5 h-3.5 ${contact.starred ? 'fill-amber-400 text-amber-400' : ''}`} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteContact(contact.id)}
-                    className="p-1 text-slate-600 hover:text-rose-400 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                <div>
+                  <h4 className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    {contact.name}
+                    {contact.starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+                  </h4>
+                  <span className="text-[11px] text-purple-400 font-mono">{contact.relationship}</span>
                 </div>
               </div>
 
-              <div className="space-y-1.5 text-xs text-slate-300 font-mono">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-3 h-3 text-slate-500" />
-                  <span>{contact.phone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Mail className="w-3 h-3 text-slate-500" />
-                  <span className="truncate">{contact.email}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Globe className="w-3 h-3 text-slate-500" />
-                  <span>
-                    Language:{' '}
-                    <strong className="text-cyan-400 uppercase">{contact.preferredLanguage}</strong>
-                  </span>
-                </div>
-              </div>
-
-              {contact.notes && (
-                <p className="text-[11px] text-slate-400 italic bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                  "{contact.notes}"
-                </p>
-              )}
-
-              {/* Quick Action Buttons */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => onOpenWhatsAppWithContact?.(contact)}
-                  className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-950/80 hover:bg-emerald-900/90 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  onClick={() => handleToggleStar(contact.id)}
+                  className="p-1 text-slate-500 hover:text-amber-400 transition-colors"
                 >
-                  <MessageSquare className="w-3 h-3" /> WhatsApp
+                  <Star className={`w-3.5 h-3.5 ${contact.starred ? 'fill-amber-400 text-amber-400' : ''}`} />
                 </button>
-
                 <button
-                  onClick={() => onOpenEmailWithContact?.(contact)}
-                  className="flex-1 py-1.5 px-2 rounded-lg bg-blue-950/80 hover:bg-blue-900/90 border border-blue-500/30 text-blue-300 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  onClick={() => handleDeleteContact(contact.id)}
+                  className="p-1 text-slate-600 hover:text-rose-400 transition-colors"
                 >
-                  <Mail className="w-3 h-3" /> Email
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
-
-                <a
-                  href={`tel:${contact.phone}`}
-                  className="py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors flex items-center justify-center cursor-pointer"
-                  title="Direct Phone Call"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                </a>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+
+            <div className="space-y-1.5 text-xs text-slate-300 font-mono">
+              <div className="flex items-center gap-2">
+                <Phone className="w-3 h-3 text-slate-500" />
+                <span>{contact.phone}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Mail className="w-3 h-3 text-slate-500" />
+                <span className="truncate">{contact.email}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Globe className="w-3 h-3 text-slate-500" />
+                <span>
+                  Language:{' '}
+                  <strong className="text-cyan-400 uppercase">{contact.preferredLanguage}</strong>
+                </span>
+              </div>
+            </div>
+
+            {contact.notes && (
+              <p className="text-[11px] text-slate-400 italic bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                "{contact.notes}"
+              </p>
+            )}
+
+            {/* Quick Action Buttons */}
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+              <button
+                onClick={() => onOpenWhatsAppWithContact?.(contact)}
+                className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-950/80 hover:bg-emerald-900/90 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <MessageSquare className="w-3 h-3" /> WhatsApp
+              </button>
+
+              <button
+                onClick={() => onOpenEmailWithContact?.(contact)}
+                className="flex-1 py-1.5 px-2 rounded-lg bg-blue-950/80 hover:bg-blue-900/90 border border-blue-500/30 text-blue-300 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Mail className="w-3 h-3" /> Email
+              </button>
+
+              <a
+                href={`tel:${contact.phone}`}
+                className="py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors flex items-center justify-center"
+                title="Direct Phone Call"
+              >
+                <Phone className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Add Contact Modal Dialog */}
       {showAddModal && (
